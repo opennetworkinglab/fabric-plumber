@@ -17,6 +17,8 @@ package org.onosproject.plumber;
 
 import com.google.common.collect.Streams;
 import org.onlab.util.SharedExecutors;
+import org.onosproject.core.ApplicationId;
+import org.onosproject.core.CoreService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
 import org.onosproject.net.Link;
@@ -61,6 +63,9 @@ public class FabricPlumber {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected CoreService coreService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected TopologyService topologyService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
@@ -75,10 +80,12 @@ public class FabricPlumber {
     private ExecutorService executor = SharedExecutors.getSingleThreadExecutor();
     private TopologyListener topoListener = new InternalTopologyListener();
     private HostListener hostListener = new InternalHostListener();
+    private ApplicationId appId;
 
 
     @Activate
     protected void activate() {
+        appId = coreService.registerApplication("org.onosproject.fabric.plumber");
         topologyService.addListener(topoListener);
         hostService.addListener(hostListener);
         log.info("Started");
@@ -146,7 +153,7 @@ public class FabricPlumber {
                 .build();
 
         return DefaultFlowRule.builder()
-                .forDevice(deviceId)
+                .forDevice(deviceId).fromApp(appId)
                 .forTable(PiTableId.of("FabricIngress.filtering.ingress_port_vlan"))
                 .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
                 .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
@@ -165,7 +172,7 @@ public class FabricPlumber {
                 .build();
 
         return DefaultFlowRule.builder()
-                .forDevice(deviceId)
+                .forDevice(deviceId).fromApp(appId)
                 .forTable(PiTableId.of("FabricIngress.forwarding.bridging"))
                 .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
                 .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
@@ -183,7 +190,7 @@ public class FabricPlumber {
                 .build();
 
         return DefaultFlowRule.builder()
-                .forDevice(deviceId)
+                .forDevice(deviceId).fromApp(appId)
                 .forTable(PiTableId.of("FabricIngress.next.simple"))
                 .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
                 .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
@@ -201,7 +208,7 @@ public class FabricPlumber {
                 .build();
 
         return DefaultFlowRule.builder()
-                .forDevice(deviceId)
+                .forDevice(deviceId).fromApp(appId)
                 .forTable(PiTableId.of("FabricEgress.egress_next.egress_vlan"))
                 .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
                 .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())

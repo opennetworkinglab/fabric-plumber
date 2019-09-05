@@ -98,6 +98,7 @@ public class FabricPlumber {
     protected void deactivate() {
         topologyService.removeListener(topoListener);
         hostService.addListener(hostListener);
+        flowRuleService.removeFlowRulesById(appId);
         log.info("Stopped");
     }
 
@@ -125,7 +126,7 @@ public class FabricPlumber {
     }
 
     private void plumbPath(Path path, Host dst) {
-        Link links[] = new Link[path.links().size()];
+        Link[] links = new Link[path.links().size()];
         path.links().toArray(links);
 
         for (int i = 1; i < links.length; i++) {

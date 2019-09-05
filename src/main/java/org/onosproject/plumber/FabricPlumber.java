@@ -77,17 +77,20 @@ public class FabricPlumber {
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected FlowRuleService flowRuleService;
 
+    private static final int PRIORITY = 4321;
+    private static final long MAC_MASK = 0xffffffffffffL;
+
     private ExecutorService executor = SharedExecutors.getSingleThreadExecutor();
     private TopologyListener topoListener = new InternalTopologyListener();
     private HostListener hostListener = new InternalHostListener();
     private ApplicationId appId;
-
 
     @Activate
     protected void activate() {
         appId = coreService.registerApplication("org.onosproject.fabric.plumber");
         topologyService.addListener(topoListener);
         hostService.addListener(hostListener);
+        executor.submit(FabricPlumber.this::processMesh);
         log.info("Started");
     }
 
@@ -95,11 +98,11 @@ public class FabricPlumber {
     protected void deactivate() {
         topologyService.removeListener(topoListener);
         hostService.addListener(hostListener);
-
         log.info("Stopped");
     }
 
     private void processMesh() {
+        flowRuleService.removeFlowRulesById(appId);
         hostService.getHosts().forEach(this::plumbToDest);
     }
 
@@ -117,6 +120,7 @@ public class FabricPlumber {
         }
 
         Path path = paths.iterator().next();
+        log.info("Plumbing path from {} to {} via {}", src.id(), dst.id(), path);
         plumbPath(path, dst);
     }
 
@@ -126,7 +130,7 @@ public class FabricPlumber {
 
         for (int i = 1; i < links.length; i++) {
             plumbFlowRules(links[i].src().deviceId(),
-                           links[i-1].dst().port(), links[i].src().port(),
+                           links[i - 1].dst().port(), links[i].src().port(),
                            dst);
         }
     }
@@ -153,7 +157,7 @@ public class FabricPlumber {
                 .build();
 
         return DefaultFlowRule.builder()
-                .forDevice(deviceId).fromApp(appId)
+                .forDevice(deviceId).fromApp(appId).makePermanent().withPriority(PRIORITY)
                 .forTable(PiTableId.of("FabricIngress.filtering.ingress_port_vlan"))
                 .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
                 .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
@@ -163,7 +167,7 @@ public class FabricPlumber {
     private FlowRule bridgingRule(DeviceId deviceId, Host dst, PortNumber outPort) {
         PiCriterion match = PiCriterion.builder()
                 .matchExact(PiMatchFieldId.of("vlan_id"), 100)
-                .matchExact(PiMatchFieldId.of("eth_dst"), dst.mac().toBytes())
+                .matchTernary(PiMatchFieldId.of("eth_dst"), dst.mac().toLong(), MAC_MASK)
                 .build();
 
         PiAction action = PiAction.builder()
@@ -172,7 +176,7 @@ public class FabricPlumber {
                 .build();
 
         return DefaultFlowRule.builder()
-                .forDevice(deviceId).fromApp(appId)
+                .forDevice(deviceId).fromApp(appId).makePermanent().withPriority(PRIORITY)
                 .forTable(PiTableId.of("FabricIngress.forwarding.bridging"))
                 .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
                 .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
@@ -190,7 +194,7 @@ public class FabricPlumber {
                 .build();
 
         return DefaultFlowRule.builder()
-                .forDevice(deviceId).fromApp(appId)
+                .forDevice(deviceId).fromApp(appId).makePermanent().withPriority(PRIORITY)
                 .forTable(PiTableId.of("FabricIngress.next.simple"))
                 .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
                 .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
@@ -208,7 +212,7 @@ public class FabricPlumber {
                 .build();
 
         return DefaultFlowRule.builder()
-                .forDevice(deviceId).fromApp(appId)
+                .forDevice(deviceId).fromApp(appId).makePermanent().withPriority(PRIORITY)
                 .forTable(PiTableId.of("FabricEgress.egress_next.egress_vlan"))
                 .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
                 .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
